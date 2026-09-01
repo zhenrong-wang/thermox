@@ -26,6 +26,7 @@ import type {
   ModelRevisionList,
   PerformanceMapArtifactDefinition,
   ProjectModelValidation,
+  ProjectDefinitionValidation,
   ProjectList,
   ReconciliationResult,
   ReconciliationRevision,
@@ -183,11 +184,12 @@ async function postDownload(
   }
 }
 
-async function postValidation(
+async function postValidation<T extends { schema_version: string }>(
   path: string,
   body: unknown,
+  expectedSchema: T['schema_version'],
   signal?: AbortSignal,
-): Promise<ProjectModelValidation> {
+): Promise<T> {
   const response = await fetch(path, {
     method: 'POST',
     headers: {
@@ -198,10 +200,10 @@ async function postValidation(
     signal,
   })
   const document = (await response.json()) as
-    | ProjectModelValidation
+    | T
     | { schema_version?: string; message?: string }
-  if (document.schema_version === 'thermox.project_model_validation/v1') {
-    return document as ProjectModelValidation
+  if (document.schema_version === expectedSchema) {
+    return document as T
   }
   throw new ApiError(
     response.status,
@@ -600,14 +602,29 @@ export const api = {
     artifactRevisionIds: string[],
     signal?: AbortSignal,
   ) =>
-    postValidation(
+    postValidation<ProjectModelValidation>(
       `/api/v1/projects/${encodeURIComponent(projectId)}/model-revisions/${encodeURIComponent(modelRevisionId)}/case-revisions/${encodeURIComponent(caseRevisionId)}/validate`,
       {
         schema_version: 'thermox.project_model_validation_request/v1',
         artifact_revision_ids: artifactRevisionIds,
       },
+      'thermox.project_model_validation/v1',
       signal,
     ),
+  validateDefinition: (
+    projectId: string,
+    modelRevisionId: string,
+    artifactRevisionIds: string[],
+    signal?: AbortSignal,
+  ) => postValidation<ProjectDefinitionValidation>(
+    `/api/v1/projects/${encodeURIComponent(projectId)}/model-revisions/${encodeURIComponent(modelRevisionId)}/validate-definition`,
+    {
+      schema_version: 'thermox.project_definition_validation_request/v1',
+      artifact_revision_ids: artifactRevisionIds,
+    },
+    'thermox.project_definition_validation/v1',
+    signal,
+  ),
   studyRevisions: (projectId: string, signal?: AbortSignal) =>
     getJson<StudyRevisionList>(
       `/api/v1/projects/${encodeURIComponent(projectId)}/study-revisions`,

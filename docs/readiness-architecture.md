@@ -11,6 +11,14 @@ compilation preview, and diagnostics. The summary contains one authoritative `ca
 layer states, and entity states. Project validation preserves the exact topology, case, and
 artifact revision identities around that response.
 
+`SimulationService::validate_definition` is the case-independent companion. It resolves the
+component catalog, physical parameters, media, materials, port contracts, connections, and bound
+engineering artifacts for an exact model definition. A successful response marks the `draft`,
+`physical`, and `topology` layers ready and reports the common steady/transient capabilities of the
+graph. It deliberately leaves `study`, `compilation`, and `execution` not evaluated and keeps
+`calculatable` false: physical completeness is useful evidence, but it is not an operating Study.
+The project endpoint wraps this evidence with the exact immutable model and artifact revisions.
+
 ## Layer contract
 
 Readiness is reported in six stable layers:

@@ -308,7 +308,33 @@ struct CompiledTransientModelGraph {
     DaeProblem problem;
 };
 
+struct ModelDefinitionValidationSummary {
+    std::size_t component_count{0};
+    std::size_t connection_count{0};
+    bool supports_steady{false};
+    bool supports_transient{false};
+};
+
 ComponentRegistry make_default_component_registry();
+ModelDefinitionValidationSummary validate_model_definition(
+    const ModelDocument& document,
+    const ComponentRegistry& registry);
+ModelDefinitionValidationSummary validate_model_definition(
+    const ModelDocument& document,
+    const ComponentRegistry& registry,
+    const physics::PropertyPackageRegistry& property_registry);
+ModelDefinitionValidationSummary validate_model_definition(
+    const ModelDocument& document,
+    const ComponentRegistry& registry,
+    const physics::PropertyPackageRegistry& property_registry,
+    const EngineeringArtifactRegistry& artifact_registry);
+ModelDefinitionValidationSummary validate_model_definition(
+    const ModelDocument& document,
+    const ComponentRegistry& registry,
+    const physics::PropertyPackageRegistry& property_registry,
+    const EngineeringArtifactRegistry& artifact_registry,
+    const physics::ThermochemistryPackageRegistry&
+        thermochemistry_registry);
 CompiledModelGraph compile_model_graph(const ModelDocument& document,
                                        const ComponentRegistry& registry,
                                        const std::string& case_id = {});

@@ -180,6 +180,39 @@ describe('topology draft API', () => {
   })
 })
 
+describe('physical definition validation API', () => {
+  it('validates an exact topology and artifact revision set without a case', async () => {
+    const response = {
+      schema_version: 'thermox.project_definition_validation/v1',
+      model_revision_id: 'model-r2',
+      artifact_revisions: [],
+      validation: { definition: { validated: true } },
+    }
+    const fetchMock = vi.fn(async (
+      _input: RequestInfo | URL,
+      _init?: RequestInit,
+    ) => new Response(JSON.stringify(response), {
+      status: 200,
+      headers: { 'Content-Type': 'application/json' },
+    }))
+    vi.stubGlobal('fetch', fetchMock)
+
+    await api.validateDefinition('project/a', 'model-r2', ['artifact-r7'])
+
+    const [path, request] = fetchMock.mock.calls[0]
+    expect(path).toBe(
+      '/api/v1/projects/project%2Fa/model-revisions/model-r2/validate-definition',
+    )
+    expect(request).toMatchObject({
+      method: 'POST',
+      body: JSON.stringify({
+        schema_version: 'thermox.project_definition_validation_request/v1',
+        artifact_revision_ids: ['artifact-r7'],
+      }),
+    })
+  })
+})
+
 describe('Study package API', () => {
   it('submits one package operation with the selected topology parent', async () => {
     const document = {

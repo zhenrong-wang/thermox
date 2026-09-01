@@ -1492,6 +1492,160 @@ ComponentRegistry make_default_component_registry() {
     return registry;
 }
 
+ModelDefinitionValidationSummary validate_model_definition(
+    const ModelDocument& document,
+    const ComponentRegistry& registry) {
+    return validate_model_definition(
+        document,
+        registry,
+        physics::make_default_property_package_registry());
+}
+
+ModelDefinitionValidationSummary validate_model_definition(
+    const ModelDocument& document,
+    const ComponentRegistry& registry,
+    const physics::PropertyPackageRegistry& property_registry) {
+    return validate_model_definition(
+        document,
+        registry,
+        property_registry,
+        EngineeringArtifactRegistry{});
+}
+
+ModelDefinitionValidationSummary validate_model_definition(
+    const ModelDocument& document,
+    const ComponentRegistry& registry,
+    const physics::PropertyPackageRegistry& property_registry,
+    const EngineeringArtifactRegistry& artifact_registry) {
+    return validate_model_definition(
+        document,
+        registry,
+        property_registry,
+        artifact_registry,
+        physics::ThermochemistryPackageRegistry{});
+}
+
+ModelDefinitionValidationSummary validate_model_definition(
+    const ModelDocument& hierarchical_document,
+    const ComponentRegistry& registry,
+    const physics::PropertyPackageRegistry& property_registry,
+    const EngineeringArtifactRegistry& artifact_registry,
+    const physics::ThermochemistryPackageRegistry&
+        thermochemistry_registry) {
+    const auto document = flatten_model_document(hierarchical_document);
+    if (document.components.empty()) {
+        throw std::invalid_argument(
+            "model '" + document.model_id +
+            "' must contain at least one component");
+    }
+    const auto medium_properties =
+        create_medium_properties(document, property_registry);
+    ModelDefinitionValidationSummary summary;
+    summary.component_count = document.components.size();
+    summary.connection_count = document.connections.size();
+    summary.supports_steady = true;
+    summary.supports_transient = true;
+
+    for (const auto& component : document.components) {
+        const auto& model = registry.require_model(component.kind);
+        const auto descriptor = model.instance_descriptor(component);
+        validate_component_descriptor(descriptor);
+        validate_component_bindings(component, descriptor);
+        validate_component_parameters(component, descriptor);
+        summary.supports_steady =
+            summary.supports_steady && descriptor.supports_steady;
+        summary.supports_transient =
+            summary.supports_transient && descriptor.supports_transient;
+
+        ComponentCompileContext context{
+            component, nullptr, {}, {}, {}, {}, {}, {}, {}, {}};
+        for (const auto& port : descriptor.ports) {
+            if (port.domain == "fluid") {
+                const auto medium_id =
+                    require_medium_binding(component, port.name);
+                const auto package = medium_properties.find(medium_id);
+                if (package == medium_properties.end()) {
+                    throw std::logic_error(
+                        "validated medium property package missing: " +
+                        medium_id);
+                }
+                context.port_properties.emplace(
+                    port.name, package->second);
+            } else if (port.domain == "inventory") {
+                const auto medium_id =
+                    resolved_port_medium_binding(component, port);
+                if (!medium_properties.contains(medium_id)) {
+                    throw std::invalid_argument(
+                        "component '" + component.id +
+                        "' inventory port '" + port.name +
+                        "' references unknown medium: " + medium_id);
+                }
+            } else if (port.domain == "material") {
+                const auto material_id =
+                    require_material_binding(component, port.name);
+                const auto& material =
+                    find_material(document, material_id);
+                context.port_species.emplace(
+                    port.name, material.species);
+                if (!descriptor.required_thermochemistry_capabilities
+                         .empty()) {
+                    auto package = thermochemistry_registry.create(
+                        material.backend,
+                        material.mechanism,
+                        material.phase);
+                    if (!material.package_version.empty() &&
+                        material.package_version != package->version()) {
+                        throw std::invalid_argument(
+                            "material '" + material.id +
+                            "' requests thermochemistry package version '" +
+                            material.package_version + "' but backend '" +
+                            material.backend + "' provides version '" +
+                            std::string(package->version()) + "'");
+                    }
+                    for (const auto& species : material.species) {
+                        if (std::find(
+                                package->species_basis().begin(),
+                                package->species_basis().end(),
+                                species) ==
+                            package->species_basis().end()) {
+                            throw std::invalid_argument(
+                                "material '" + material.id +
+                                "' species is absent from backend mechanism: " +
+                                species);
+                        }
+                    }
+                    for (const auto capability :
+                         descriptor
+                             .required_thermochemistry_capabilities) {
+                        if (!package->supports(capability)) {
+                            throw std::invalid_argument(
+                                "component '" + component.id +
+                                "' requires an unsupported "
+                                "thermochemistry capability");
+                        }
+                    }
+                    context.port_thermochemistry.emplace(
+                        port.name, std::move(package));
+                }
+            }
+        }
+        resolve_component_artifacts(context, model, artifact_registry);
+        validate_property_capabilities(context, model);
+    }
+
+    std::map<std::string, std::size_t> connection_counts;
+    for (const auto& connection : document.connections) {
+        (void)validate_connection(
+            document, registry, connection, connection_counts);
+    }
+    if (!summary.supports_steady && !summary.supports_transient) {
+        throw std::invalid_argument(
+            "model '" + document.model_id +
+            "' has no common steady or transient execution mode");
+    }
+    return summary;
+}
+
 CompiledModelGraph compile_model_graph(const ModelDocument& document,
                                        const ComponentRegistry& registry,
                                        const std::string& case_id) {

@@ -110,6 +110,7 @@ import type {
   PerformanceMapArtifactDefinition,
   ModelRevision,
   ProjectModelValidation,
+  ProjectDefinitionValidation,
   ProjectComponentCatalogEntry,
   Project,
   ReconciliationResult,
@@ -247,6 +248,9 @@ function App() {
   const [caseOperationStatus, setCaseOperationStatus] = useState('')
   const [validationResult, setValidationResult] =
     useState<ProjectModelValidation>()
+  const [definitionValidation, setDefinitionValidation] =
+    useState<ProjectDefinitionValidation>()
+  const [validatingDefinition, setValidatingDefinition] = useState(false)
   const [studyRevisions, setStudyRevisions] = useState<StudyRevision[]>([])
   const [addingStudy, setAddingStudy] = useState(false)
   const [showingStudyPackage, setShowingStudyPackage] = useState(false)
@@ -776,6 +780,26 @@ function App() {
     ),
     [requiredArtifactIds, studyArtifactSelections],
   )
+  const exactDefinitionValidation = useMemo(() => {
+    if (
+      !definitionValidation ||
+      definitionValidation.project_id !== selectedProjectId ||
+      definitionValidation.model_revision_id !== selectedRevisionId
+    ) return undefined
+    const validated = definitionValidation.artifact_revisions
+      .map((revision) => revision.artifact_revision_id)
+      .sort()
+    const selected = [...selectedArtifactRevisionIds].sort()
+    return validated.length === selected.length &&
+      validated.every((id, index) => id === selected[index])
+      ? definitionValidation
+      : undefined
+  }, [
+    definitionValidation,
+    selectedArtifactRevisionIds,
+    selectedProjectId,
+    selectedRevisionId,
+  ])
   const activePublishedStudy = useMemo(
     () =>
       visibleStudies.find(
@@ -1722,6 +1746,34 @@ function App() {
       throw new Error(message)
     } finally {
       setValidating(false)
+    }
+  }
+
+  async function validatePhysicalDefinition() {
+    if (!selectedProjectId || !selectedRevisionId) {
+      setOperationError('Select a topology revision before validation.')
+      return
+    }
+    setValidatingDefinition(true)
+    setOperationError('')
+    setOperationStatus('')
+    try {
+      const result = await api.validateDefinition(
+        selectedProjectId,
+        selectedRevisionId,
+        selectedArtifactRevisionIds,
+      )
+      setDefinitionValidation(result)
+      setOperationStatus(
+        result.validation.definition.validated
+          ? 'Exact physical definition passed authoritative validation.'
+          : 'Physical definition validation returned diagnostics.',
+      )
+    } catch (reason) {
+      const message = errorMessage(reason)
+      setOperationError(message)
+    } finally {
+      setValidatingDefinition(false)
     }
   }
 
@@ -2869,6 +2921,8 @@ function App() {
             catalog={topologyCatalog}
             readiness={physicalReadiness}
             artifactRevisions={artifactRevisions}
+            validation={exactDefinitionValidation}
+            validating={validatingDefinition}
             publishing={publishing}
             loadingArtifactRevision={loadingArtifactRevision}
             operationError={operationError}
@@ -2907,6 +2961,7 @@ function App() {
               void reviseBalanceUncertainty(revision)
             }}
             onBuild={() => setWorkspaceView('topology')}
+            onValidate={() => void validatePhysicalDefinition()}
           />
         ) : workspaceView === 'studies' ? (
           <CaseWorkspace

@@ -948,6 +948,15 @@ struct CompilationSummary {
     std::string catalog_fingerprint;
 };
 
+struct DefinitionValidationSummary {
+    bool validated{false};
+    std::size_t component_count{0};
+    std::size_t connection_count{0};
+    bool supports_steady{false};
+    bool supports_transient{false};
+    std::string catalog_fingerprint;
+};
+
 struct ReadinessLayer {
     std::string id;
     ReadinessState state{ReadinessState::not_evaluated};
@@ -1031,6 +1040,7 @@ struct ValidateModelResponse {
     ServiceError error;
     ModelMetadata model;
     std::string canonical_model_json;
+    DefinitionValidationSummary definition;
     CompilationSummary compilation;
     ReadinessSummary readiness;
     std::vector<PerformanceMapQualitySummary> performance_map_quality;
@@ -1712,6 +1722,8 @@ public:
     SimulationService& operator=(const SimulationService&) = delete;
 
     [[nodiscard]] ValidateModelResponse validate_model(
+        const ValidateModelRequest& request) const;
+    [[nodiscard]] ValidateModelResponse validate_definition(
         const ValidateModelRequest& request) const;
     [[nodiscard]] CatalogResponse get_catalog(
         const CatalogRequest& request = {}) const;

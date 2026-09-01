@@ -217,9 +217,20 @@ JSON scalar types, rejects unknown fields, normalizes quantities to SI, and vali
 medium/material bindings. After all operations, the full topology is serialized canonically and
 parsed again to enforce cross-entity structural integrity.
 
-Compile-time checks that require a simulation case—port compatibility, equation/unknown balance,
-registry resolution, and component-specific case data—remain in model validation and run
-configuration execution. The revision-backed validation command exposes those checks at:
+The service can validate the physical definition before an operating case exists:
+
+```text
+POST /api/v1/projects/{project_id}/model-revisions/{model_revision_id}/validate-definition
+```
+
+That command resolves the exact immutable topology and selected artifact revisions, validates
+component, medium, material, parameter, artifact, port, connection, and common execution-mode
+contracts, and returns entity-attributed diagnostics. It does not compile equations or claim the
+system is calculatable.
+
+Checks that require a simulation case—boundary-condition closure, equation/unknown balance,
+case-mode compatibility, and compilation—remain in full model validation and run configuration
+execution. The revision-backed validation command exposes those checks at:
 
 ```text
 POST /api/v1/projects/{project_id}/model-revisions/{model_revision_id}/case-revisions/{case_revision_id}/validate

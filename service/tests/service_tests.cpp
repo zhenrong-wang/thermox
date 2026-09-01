@@ -1651,6 +1651,65 @@ void test_regime_map_template_instantiation() {
 
 void test_validation_and_canonicalization() {
     thermox::service::SimulationService service;
+    thermox::service::ValidateModelRequest definition_request;
+    definition_request.model_json = read_source_file(
+        "core/examples/air_compressor.json");
+    const auto definition =
+        service.validate_definition(definition_request);
+    const auto definition_layer = [&](const std::string& id) {
+        return std::find_if(
+            definition.readiness.layers.begin(),
+            definition.readiness.layers.end(),
+            [&](const auto& layer) { return layer.id == id; });
+    };
+    require(
+        definition.succeeded() && definition.definition.validated &&
+            definition.definition.component_count == 1U &&
+            definition.definition.connection_count == 0U &&
+            definition.definition.supports_steady &&
+            definition.definition.supports_transient &&
+            !definition.compilation.compiled &&
+            !definition.readiness.calculatable &&
+            definition_layer("draft")->state ==
+                thermox::service::ReadinessState::ready &&
+            definition_layer("physical")->state ==
+                thermox::service::ReadinessState::ready &&
+            definition_layer("topology")->state ==
+                thermox::service::ReadinessState::ready &&
+            definition_layer("study")->state ==
+                thermox::service::ReadinessState::not_evaluated &&
+            definition_layer("execution")->state ==
+                thermox::service::ReadinessState::not_evaluated,
+        "definition validation must prove physical contracts without "
+        "inventing an operating case or claiming calculatability; status=" +
+            thermox::service::to_string(definition.status) +
+            " error=" + definition.error.message +
+            " steady=" +
+            (definition.definition.supports_steady ? "true" : "false") +
+            " transient=" +
+            (definition.definition.supports_transient ? "true" : "false"));
+    auto invalid_definition_request = definition_request;
+    const auto known_kind = std::string(
+        "compressor.fluid.isentropic_efficiency");
+    const auto kind_position =
+        invalid_definition_request.model_json.find(known_kind);
+    require(
+        kind_position != std::string::npos,
+        "definition fixture must contain the expected component kind");
+    invalid_definition_request.model_json.replace(
+        kind_position, known_kind.size(), "compressor.unknown");
+    const auto invalid_definition =
+        service.validate_definition(invalid_definition_request);
+    require(
+        !invalid_definition.succeeded() &&
+            !invalid_definition.definition.validated &&
+            !invalid_definition.diagnostics.empty() &&
+            invalid_definition.diagnostics.front().stage == "physical" &&
+            invalid_definition.diagnostics.front().component_id ==
+                "compressor",
+        "definition validation must attribute unknown component models "
+        "without requiring case data");
+
     thermox::service::ValidateModelRequest request;
     request.model_json =
         read_source_file("core/examples/air_compressor.json");
@@ -1660,7 +1719,9 @@ void test_validation_and_canonicalization() {
         response.model.model_id == "air_compressor",
         "validation must return model identity");
     require(
-        response.compilation.compiled &&
+        response.definition.validated &&
+            response.definition.component_count == 1U &&
+            response.compilation.compiled &&
             response.compilation.mode == "steady" &&
             response.compilation.variable_count ==
                 response.compilation.equation_count &&
@@ -1711,6 +1772,9 @@ void test_validation_and_canonicalization() {
                 std::string::npos &&
             validation_json.find(
                 "\"largest_structural_block_size\":") !=
+                std::string::npos &&
+            validation_json.find(
+                "\"definition\": {\"validated\": true") !=
                 std::string::npos &&
             validation_json.find(
                 "\"suggested_tear_variable_names\":") !=

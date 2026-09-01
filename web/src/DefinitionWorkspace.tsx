@@ -3,6 +3,7 @@ import type {
   ArtifactRevision,
   Catalog,
   ComponentDefinition,
+  ProjectDefinitionValidation,
   TopologyDocument,
 } from './types'
 
@@ -11,6 +12,8 @@ interface DefinitionWorkspaceProps {
   catalog?: Catalog
   readiness: Record<string, ComponentDefinitionReadiness>
   artifactRevisions: ArtifactRevision[]
+  validation?: ProjectDefinitionValidation
+  validating: boolean
   publishing: boolean
   loadingArtifactRevision: boolean
   operationError: string
@@ -27,6 +30,7 @@ interface DefinitionWorkspaceProps {
   onAddBalanceUncertainty: () => void
   onReviseBalanceUncertainty: (revision: ArtifactRevision) => void
   onBuild: () => void
+  onValidate: () => void
 }
 
 export function DefinitionWorkspace({
@@ -34,6 +38,8 @@ export function DefinitionWorkspace({
   catalog,
   readiness,
   artifactRevisions,
+  validation,
+  validating,
   publishing,
   loadingArtifactRevision,
   operationError,
@@ -50,6 +56,7 @@ export function DefinitionWorkspace({
   onAddBalanceUncertainty,
   onReviseBalanceUncertainty,
   onBuild,
+  onValidate,
 }: DefinitionWorkspaceProps) {
   if (!topology || !catalog) {
     return (
@@ -81,7 +88,9 @@ export function DefinitionWorkspace({
       item.issues.map((issue) => issue.id),
     ),
   ).size
-  const busy = publishing || loadingArtifactRevision
+  const busy = publishing || loadingArtifactRevision || validating
+  const definition = validation?.validation.definition
+  const authoritativeReady = Boolean(definition?.validated)
   const latestCorrelations = [...artifactRevisions]
     .filter((revision) => revision.artifact_type === 'thermox.correlation')
     .sort((left, right) => right.revision_number - left.revision_number)
@@ -119,6 +128,14 @@ export function DefinitionWorkspace({
           <h1>{topology.model.name}</h1>
         </div>
         <div className="definition-toolbar-actions">
+          <button
+            type="button"
+            className="primary-button"
+            disabled={busy}
+            onClick={onValidate}
+          >
+            {validating ? 'Validating…' : 'Validate definition'}
+          </button>
           <button
             type="button"
             className="secondary-button"
@@ -176,6 +193,8 @@ export function DefinitionWorkspace({
         >
           {loadingArtifactRevision
             ? 'Loading and verifying immutable artifact payload…'
+            : validating
+              ? 'Validating exact topology and artifact revisions…'
             : publishing
               ? 'Publishing immutable physical-system revision…'
               : operationError || operationStatus}
@@ -210,6 +229,56 @@ export function DefinitionWorkspace({
             <strong>{issueCount}</strong>
             <small>authoring hints before compilation</small>
           </div>
+        </section>
+
+        <section className={`definition-authority-card${
+          validation ? authoritativeReady ? ' is-ready' : ' is-blocked' : ''
+        }`}>
+          <header>
+            <div>
+              <span className="section-kicker">Service authority</span>
+              <h2>{!validation
+                ? 'Physical definition not validated'
+                : authoritativeReady
+                  ? 'Physical definition validated'
+                  : 'Physical definition blocked'}</h2>
+            </div>
+            <button type="button" className="secondary-button"
+              disabled={busy} onClick={onValidate}>
+              {validating ? 'Validating…' : validation ? 'Validate again' : 'Validate exact revisions'}
+            </button>
+          </header>
+          <p>
+            This check resolves registered component implementations, fluid and material
+            packages, port bindings, connections, parameters, and pinned engineering artifacts.
+            It does not claim calculation readiness without an operating case and Study.
+          </p>
+          {validation && (
+            <div className="definition-authority-summary">
+              <span>{definition?.component_count ?? 0} components</span>
+              <span>{definition?.connection_count ?? 0} connections</span>
+              <span>{definition?.supports_steady ? 'steady supported' : 'steady unavailable'}</span>
+              <span>{definition?.supports_transient ? 'transient supported' : 'transient unavailable'}</span>
+              <span>{validation.artifact_revisions.length} pinned artifacts</span>
+            </div>
+          )}
+          {validation && validation.validation.diagnostics.length > 0 && (
+            <ul className="definition-authority-issues">
+              {validation.validation.diagnostics.map((diagnostic, index) => (
+                <li key={`${diagnostic.code}-${diagnostic.json_path}-${index}`}>
+                  <code>{diagnostic.json_path || diagnostic.code}</code>
+                  <strong>{diagnostic.message}</strong>
+                  {diagnostic.suggestions[0] && <small>{diagnostic.suggestions[0]}</small>}
+                </li>
+              ))}
+            </ul>
+          )}
+          {validation && (
+            <small>
+              Model <code>{validation.model_revision_id}</code> ·{' '}
+              <code>{validation.model_checksum}</code>
+            </small>
+          )}
         </section>
 
         <section className="physical-component-section">

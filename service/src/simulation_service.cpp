@@ -2167,6 +2167,159 @@ SimulationService::SimulationService(SimulationService&&) noexcept =
 SimulationService& SimulationService::operator=(
     SimulationService&&) noexcept = default;
 
+static void populate_definition_summary(
+    ValidateModelResponse& response,
+    const platform::ModelDefinitionValidationSummary& summary,
+    const std::string& catalog_fingerprint) {
+    response.definition.validated = true;
+    response.definition.component_count = summary.component_count;
+    response.definition.connection_count = summary.connection_count;
+    response.definition.supports_steady = summary.supports_steady;
+    response.definition.supports_transient = summary.supports_transient;
+    response.definition.catalog_fingerprint = catalog_fingerprint;
+}
+
+ValidateModelResponse SimulationService::validate_definition(
+    const ValidateModelRequest& request) const {
+    ValidateModelResponse response;
+    if (!valid_schema(request.schema_version)) {
+        response.error = make_error(
+            "unsupported_command_schema",
+            "request",
+            "unsupported command schema_version: " +
+                request.schema_version);
+        return response;
+    }
+    if (request.model_json.empty()) {
+        response.error = make_error(
+            "missing_model", "request", "model_json must not be empty");
+        set_layer_state(
+            response.readiness, "draft", ReadinessState::blocked,
+            "missing_model_document");
+        response.diagnostics.push_back({
+            "missing_model_document",
+            DiagnosticSeverity::error,
+            "draft",
+            {}, {}, {}, {},
+            "model_json must not be empty",
+            {"Submit an authorable model document."},
+        });
+        return response;
+    }
+    std::shared_ptr<const SimulationRuntime> runtime;
+    try {
+        runtime = request_runtime(
+            impl_->runtime, request.components);
+    } catch (const std::exception& ex) {
+        response.status = OperationStatus::invalid_request;
+        response.error = make_error(
+            "invalid_components", "components", ex.what());
+        set_layer_state(
+            response.readiness, "physical", ReadinessState::blocked,
+            "invalid_components");
+        response.diagnostics.push_back({
+            "invalid_components",
+            DiagnosticSeverity::error,
+            "physical",
+            {}, {}, {}, {},
+            ex.what(),
+            {"Correct the request-scoped component definitions."},
+        });
+        return response;
+    }
+    SimulationArtifactBundle artifacts;
+    platform::EngineeringArtifactRegistry engineering_artifacts;
+    try {
+        artifacts = resolve_artifacts(
+            request.artifacts, impl_->artifact_resolver.get());
+        engineering_artifacts = execution_engineering_artifacts(
+            runtime->impl_->engineering_artifacts, artifacts);
+    } catch (const std::exception& ex) {
+        response.status = OperationStatus::invalid_request;
+        response.error = make_error(
+            "invalid_artifacts", "artifacts", ex.what());
+        set_layer_state(
+            response.readiness, "physical", ReadinessState::blocked,
+            "invalid_artifacts");
+        response.diagnostics.push_back({
+            "invalid_artifacts",
+            DiagnosticSeverity::error,
+            "physical",
+            {}, {}, {}, {},
+            ex.what(),
+            {"Provide valid immutable engineering artifact payloads or references."},
+        });
+        return response;
+    }
+
+    std::optional<platform::ModelDocument> document;
+    try {
+        document = platform::parse_model_document_text(
+            request.model_json, runtime->impl_->units);
+        append_performance_map_quality(
+            artifacts, engineering_artifacts, *document, response);
+        initialize_entity_readiness(response.readiness, *document);
+        set_layer_state(
+            response.readiness, "draft", ReadinessState::ready);
+        response.model = model_metadata(*document);
+        response.canonical_model_json =
+            detail::serialize_model_document_json(*document);
+        platform::validate_calibration_observation_contracts(
+            *document,
+            runtime->impl_->components,
+            runtime->impl_->thermochemistry);
+        const auto summary = platform::validate_model_definition(
+            *document,
+            runtime->impl_->components,
+            runtime->impl_->properties,
+            engineering_artifacts,
+            runtime->impl_->thermochemistry);
+        populate_definition_summary(
+            response, summary, runtime->impl_->fingerprint);
+        set_layer_state(
+            response.readiness, "physical", ReadinessState::ready);
+        set_layer_state(
+            response.readiness, "topology", ReadinessState::ready);
+        set_all_entities_ready(response.readiness);
+        response.status = OperationStatus::succeeded;
+    } catch (const std::exception& ex) {
+        response.status = OperationStatus::invalid_model;
+        const std::string message = ex.what();
+        if (!response.canonical_model_json.empty()) {
+            auto diagnostic = compilation_diagnostic(message);
+            if (document.has_value()) {
+                attribute_diagnostic(
+                    diagnostic, response.readiness, *document);
+            } else {
+                diagnostic.stage = readiness_layer_for(diagnostic.code);
+            }
+            set_layer_state(
+                response.readiness,
+                diagnostic.stage,
+                ReadinessState::blocked,
+                diagnostic.code);
+            response.error = make_error(
+                diagnostic.code, diagnostic.stage, message);
+            response.diagnostics.push_back(std::move(diagnostic));
+        } else {
+            response.error = make_error(
+                "invalid_model", "parsing", message);
+            response.diagnostics.push_back({
+                "invalid_model_document",
+                DiagnosticSeverity::error,
+                "parsing",
+                {}, {}, {}, {},
+                message,
+                {"Correct the model document and submit it again."},
+            });
+            set_layer_state(
+                response.readiness, "draft", ReadinessState::blocked,
+                "invalid_model_document");
+        }
+    }
+    return response;
+}
+
 ValidateModelResponse SimulationService::validate_model(
     const ValidateModelRequest& request) const {
     ValidateModelResponse response;
@@ -2256,6 +2409,14 @@ ValidateModelResponse SimulationService::validate_model(
         platform::validate_calibration_observation_contracts(
             *document, runtime->impl_->components,
             runtime->impl_->thermochemistry);
+        const auto definition = platform::validate_model_definition(
+            *document,
+            runtime->impl_->components,
+            runtime->impl_->properties,
+            engineering_artifacts,
+            runtime->impl_->thermochemistry);
+        populate_definition_summary(
+            response, definition, runtime->impl_->fingerprint);
         const auto* simulation_case =
             selected_case(*document, request.case_id);
         if (!request.case_id.empty() && simulation_case == nullptr) {

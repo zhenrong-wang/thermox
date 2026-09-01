@@ -1421,7 +1421,9 @@ service::ApplyCaseEditsRequest parse_case_edit_request(
 
 service::ValidateProjectModelRequest
 parse_project_model_validation_request(
-    const Request& request) {
+    const Request& request,
+    std::string_view expected_schema =
+        "thermox.project_model_validation_request/v1") {
     boost::json::value value;
     try {
         value = boost::json::parse(request.body);
@@ -1446,7 +1448,7 @@ parse_project_model_validation_request(
         }
     }
     if (require_json_string(root, "schema_version") !=
-        "thermox.project_model_validation_request/v1") {
+        expected_schema) {
         throw std::invalid_argument(
             "unsupported project model validation "
             "schema_version");
@@ -3811,10 +3813,40 @@ Response Api::handle(const Request& request) const {
 
                 constexpr std::string_view edits_segment =
                     "/edits";
+                constexpr std::string_view definition_validation_segment =
+                    "/validate-definition";
                 constexpr std::string_view cases_segment =
                     "/case-revisions";
                 const auto case_path =
                     model_path.substr(nested_separator);
+                if (case_path == definition_validation_segment) {
+                    reject_unknown_query(target.query, {});
+                    if (method != "post") {
+                        auto response = error_response(
+                            405,
+                            "method_not_allowed",
+                            "project definition validation only supports "
+                            "POST");
+                        response.headers["Allow"] = "POST";
+                        return response;
+                    }
+                    require_json_request(
+                        request,
+                        impl_->options.maximum_body_bytes);
+                    auto command = parse_project_model_validation_request(
+                        request,
+                        "thermox.project_definition_validation_request/v1");
+                    command.identity = identity;
+                    command.project_id = project_id;
+                    command.model_revision_id = revision_id;
+                    const auto result = impl_->project_validation
+                        .validate_definition(command);
+                    return json_response(
+                        operation_status(result.validation.status),
+                        service::
+                            serialize_project_definition_validation_json(
+                                result));
+                }
                 if (case_path == edits_segment) {
                     reject_unknown_query(target.query, {});
                     if (method != "post") {

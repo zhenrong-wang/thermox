@@ -40,6 +40,8 @@ inline constexpr char run_configuration_revision_schema_v3[] =
     "thermox.run_configuration_revision/v3";
 inline constexpr char project_model_validation_schema_v1[] =
     "thermox.project_model_validation/v1";
+inline constexpr char project_definition_validation_schema_v1[] =
+    "thermox.project_definition_validation/v1";
 inline constexpr char project_component_catalog_schema_v2[] =
     "thermox.project_component_catalog/v2";
 inline constexpr char topology_presentation_schema_v1[] =
@@ -756,6 +758,16 @@ struct ProjectModelValidationResponse {
     ValidateModelResponse validation;
 };
 
+struct ProjectDefinitionValidationResponse {
+    std::string schema_version{
+        project_definition_validation_schema_v1};
+    std::string project_id;
+    std::string model_revision_id;
+    std::string model_checksum;
+    std::vector<ArtifactRevisionRecord> artifact_revisions;
+    ValidateModelResponse validation;
+};
+
 struct ProjectComponentCatalogEntry {
     ArtifactRevisionRecord source;
     ComponentType component;
@@ -958,6 +970,9 @@ public:
 
     [[nodiscard]] ProjectModelValidationResponse validate(
         const ValidateProjectModelRequest& request) const;
+    [[nodiscard]] ProjectDefinitionValidationResponse
+    validate_definition(
+        const ValidateProjectModelRequest& request) const;
 
 private:
     std::shared_ptr<ProjectService> projects_;
@@ -1025,6 +1040,8 @@ std::string serialize_run_configuration_revisions_json(
     const std::vector<RunConfigurationRevisionRecord>& revisions);
 std::string serialize_project_model_validation_json(
     const ProjectModelValidationResponse& response);
+std::string serialize_project_definition_validation_json(
+    const ProjectDefinitionValidationResponse& response);
 std::string serialize_project_component_catalog_json(
     const ProjectComponentCatalogResponse& response);
 

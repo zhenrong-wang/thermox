@@ -1518,6 +1518,38 @@ void test_authored_component_job_workflow() {
             })json",
         });
 
+    const auto definition_validation = api.handle(authenticated(
+        json_post(
+            "/api/v1/projects/" + project.project_id +
+                "/model-revisions/" + model.model_revision_id +
+                "/validate-definition",
+            std::string{
+                R"({"schema_version":)"
+                R"("thermox.project_definition_validation_request/v1",)"
+                R"("artifact_revision_ids":[")"} +
+                component_revision_id + R"("]})"),
+        identity.user_id,
+        identity.team_id));
+    require(
+        definition_validation.status == 200 &&
+            definition_validation.body.find(
+                "thermox.project_definition_validation/v1") !=
+                std::string::npos &&
+            definition_validation.body.find(
+                "\"definition\": {\"validated\": true") !=
+                std::string::npos &&
+            definition_validation.body.find(
+                "\"compiled\": false") != std::string::npos &&
+            definition_validation.body.find(
+                "\"readiness\": {\"calculatable\": false") !=
+                std::string::npos &&
+            definition_validation.body.find(component_revision_id) !=
+                std::string::npos,
+        "definition validation must resolve exact topology and artifact "
+        "revisions without requiring a case or claiming calculatability; "
+        "status=" + std::to_string(definition_validation.status) +
+            " body=" + definition_validation.body);
+
     const auto case_location =
         "/api/v1/projects/" + project.project_id +
         "/model-revisions/" + model.model_revision_id +

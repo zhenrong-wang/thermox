@@ -3570,6 +3570,63 @@ ProjectModelValidationService::validate(
     };
 }
 
+ProjectDefinitionValidationResponse
+ProjectModelValidationService::validate_definition(
+    const ValidateProjectModelRequest& request) const {
+    if (request.project_id.empty() ||
+        request.model_revision_id.empty()) {
+        throw ProjectRequestError(
+            "project and model revision IDs must not be empty");
+    }
+    auto artifact_ids = request.artifact_revision_ids;
+    std::sort(artifact_ids.begin(), artifact_ids.end());
+    if (std::adjacent_find(
+            artifact_ids.begin(), artifact_ids.end()) !=
+        artifact_ids.end()) {
+        throw ProjectRequestError(
+            "artifact revision IDs must be unique");
+    }
+    const auto model = projects_->get_model_revision(
+        request.identity,
+        request.project_id,
+        request.model_revision_id);
+    if (!model) {
+        throw ProjectStateError("model revision was not found");
+    }
+    const auto artifacts = projects_->resolve_artifact_revisions(
+        request.identity,
+        request.project_id,
+        artifact_ids);
+    if (!artifacts) {
+        throw ProjectStateError(
+            "artifact revision was not found");
+    }
+
+    ValidateModelRequest validation_request;
+    try {
+        auto document = platform::parse_topology_document_text(
+            model->canonical_model_json);
+        document.schema_version = "thermox.model/v2";
+        validation_request.model_json =
+            detail::serialize_model_document_json(document);
+    } catch (const std::exception& error) {
+        throw ProjectStateError(
+            std::string(
+                "persisted model definition composition failed: ") +
+            error.what());
+    }
+    validation_request.artifacts = artifacts->snapshot;
+    validation_request.components = artifacts->components;
+    return {
+        project_definition_validation_schema_v1,
+        request.project_id,
+        model->model_revision_id,
+        model->checksum,
+        artifacts->revisions,
+        simulation_.validate_definition(validation_request),
+    };
+}
+
 ProjectComponentCatalogService::
     ProjectComponentCatalogService(
         std::shared_ptr<ProjectService> projects,

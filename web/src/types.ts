@@ -206,6 +206,14 @@ export interface ProjectModelValidation {
       case_id: string
     }
     canonical_model_json: string
+    definition: {
+      validated: boolean
+      component_count: number
+      connection_count: number
+      supports_steady: boolean
+      supports_transient: boolean
+      catalog_fingerprint: string
+    }
     compilation: {
       compiled: boolean
       mode: string
@@ -230,6 +238,15 @@ export interface ProjectModelValidation {
     performance_map_quality: PerformanceMapQuality[]
     diagnostics: ValidationDiagnostic[]
   }
+}
+
+export interface ProjectDefinitionValidation {
+  schema_version: 'thermox.project_definition_validation/v1'
+  project_id: string
+  model_revision_id: string
+  model_checksum: string
+  artifact_revisions: ArtifactRevision[]
+  validation: ProjectModelValidation['validation']
 }
 
 export interface SteadySolverSettings {

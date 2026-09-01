@@ -1382,6 +1382,31 @@ std::string serialize_project_model_validation_json(
     return out.str();
 }
 
+std::string serialize_project_definition_validation_json(
+    const ProjectDefinitionValidationResponse& response) {
+    std::ostringstream out;
+    out << "{\n  \"schema_version\": ";
+    json_string(out, response.schema_version);
+    out << ",\n  \"project_id\": ";
+    json_string(out, response.project_id);
+    out << ",\n  \"model_revision_id\": ";
+    json_string(out, response.model_revision_id);
+    out << ",\n  \"model_checksum\": ";
+    json_string(out, response.model_checksum);
+    out << ",\n  \"artifact_revisions\": [";
+    for (std::size_t index = 0;
+         index < response.artifact_revisions.size();
+         ++index) {
+        if (index != 0U) out << ", ";
+        artifact_revision_json(
+            out, response.artifact_revisions[index]);
+    }
+    out << "],\n  \"validation\": "
+        << serialize_validate_response_json(response.validation)
+        << "}\n";
+    return out.str();
+}
+
 std::string serialize_project_component_catalog_json(
     const ProjectComponentCatalogResponse& response) {
     std::ostringstream out;

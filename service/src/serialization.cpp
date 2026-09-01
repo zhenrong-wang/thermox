@@ -2017,6 +2017,19 @@ std::string serialize_validate_response_json(
     model_metadata_json(out, response.model);
     out << ",\n  \"canonical_model_json\": ";
     json_string(out, response.canonical_model_json);
+    out << ",\n  \"definition\": {\"validated\": "
+        << (response.definition.validated ? "true" : "false")
+        << ", \"component_count\": "
+        << response.definition.component_count
+        << ", \"connection_count\": "
+        << response.definition.connection_count
+        << ", \"supports_steady\": "
+        << (response.definition.supports_steady ? "true" : "false")
+        << ", \"supports_transient\": "
+        << (response.definition.supports_transient ? "true" : "false")
+        << ", \"catalog_fingerprint\": ";
+    json_string(out, response.definition.catalog_fingerprint);
+    out << '}';
     out << ",\n  \"compilation\": {\"compiled\": "
         << (response.compilation.compiled ? "true" : "false")
         << ", \"mode\": ";
