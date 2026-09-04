@@ -18,7 +18,6 @@ interface ComponentLibraryProps {
   onGroupComponents: () => void
   assemblyTemplates: AssemblyTemplateCatalogEntry[]
   onInstantiateAssembly: (template: AssemblyTemplateCatalogEntry) => void
-  onCreateTopology?: () => void
   onRevise: (component: CatalogComponent) => void
 }
 
@@ -30,7 +29,6 @@ export function ComponentLibrary({
   onGroupComponents,
   assemblyTemplates,
   onInstantiateAssembly,
-  onCreateTopology,
   onRevise,
 }: ComponentLibraryProps) {
   const [filter, setFilter] = useState('')
@@ -92,19 +90,9 @@ export function ComponentLibrary({
           </div>
         </div>
         <p className="library-instruction">
-          {onCreateTopology
-            ? 'Create the first topology revision to activate this library.'
-            : 'Choose a physical template and calculation model, then drag it onto the canvas.'}
+          Choose a physical template and calculation model, then drag it onto
+          the canvas.
         </p>
-        {onCreateTopology && (
-          <button
-            type="button"
-            className="library-start-button"
-            onClick={onCreateTopology}
-          >
-            Create topology
-          </button>
-        )}
         <button
           type="button"
           className="library-start-button"

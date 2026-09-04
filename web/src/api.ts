@@ -25,6 +25,7 @@ import type {
   ModelRevision,
   ModelRevisionList,
   PerformanceMapArtifactDefinition,
+  Project,
   ProjectModelValidation,
   ProjectDefinitionValidation,
   ProjectList,
@@ -257,6 +258,19 @@ export const api = {
     getJson<Catalog>('/api/v1/catalog', signal),
   projects: (signal?: AbortSignal) =>
     getJson<ProjectList>('/api/v1/projects', signal),
+  createProject: (
+    name: string,
+    description: string,
+    signal?: AbortSignal,
+  ) => postJson<Project>(
+    '/api/v1/projects',
+    {
+      schema_version: 'thermox.project.create/v1',
+      name,
+      description,
+    },
+    signal,
+  ),
   modelRevisions: (projectId: string, signal?: AbortSignal) =>
     getJson<ModelRevisionList>(
       `/api/v1/projects/${encodeURIComponent(projectId)}/model-revisions`,

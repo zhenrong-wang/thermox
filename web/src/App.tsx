@@ -40,6 +40,7 @@ import {
 import { MediumForm } from './MediumForm'
 import { MaterialForm } from './MaterialForm'
 import { PerformanceMapArtifactForm } from './PerformanceMapArtifactForm'
+import { ProjectCreateForm } from './ProjectCreateForm'
 import { RunConfigurationForm } from './RunConfigurationForm'
 import { RunConfigurationPanel } from './RunConfigurationPanel'
 import { SystemReadinessPanel } from './SystemReadinessPanel'
@@ -163,6 +164,7 @@ function App() {
     useState<WorkspaceView>('topology')
   const [catalog, setCatalog] = useState<Catalog>()
   const [projects, setProjects] = useState<Project[]>([])
+  const [addingProject, setAddingProject] = useState(false)
   const [selectedProjectId, setSelectedProjectId] = useState('')
   const [revisions, setRevisions] = useState<ModelRevision[]>([])
   const [artifactRevisions, setArtifactRevisions] = useState<
@@ -1157,6 +1159,19 @@ function App() {
     } finally {
       setPublishing(false)
     }
+  }
+
+  async function createProject(name: string, description: string) {
+    const project = await api.createProject(name, description)
+    setProjects((current) => [
+      project,
+      ...current.filter(
+        (candidate) => candidate.project_id !== project.project_id,
+      ),
+    ])
+    setSelectedProjectId(project.project_id)
+    setAddingProject(false)
+    return project
   }
 
   async function publishTopologyDocument(document: TopologyDocument) {
@@ -2652,12 +2667,20 @@ function App() {
             value={selectedProjectId}
             onChange={(event) => setSelectedProjectId(event.target.value)}
           >
+            {!projects.length && <option value="">No projects</option>}
             {projects.map((project) => (
               <option key={project.project_id} value={project.project_id}>
                 {project.name}
               </option>
             ))}
           </select>
+          <button
+            type="button"
+            className="context-create-button"
+            onClick={() => setAddingProject(true)}
+          >
+            + Project
+          </button>
           <span className="context-divider">/</span>
           <span className="context-label">Revision</span>
           <select
@@ -3085,13 +3108,6 @@ function App() {
               onGroupComponents={() => setAddingAssembly(true)}
               assemblyTemplates={assemblyTemplates}
               onInstantiateAssembly={setInstantiatingAssemblyTemplate}
-              onCreateTopology={
-                selectedProjectId && !selectedRevisionId
-                  ? () => {
-                      void createInitialTopology()
-                    }
-                  : undefined
-              }
               onRevise={(component) => {
                 const sourceRevisionId =
                   component.source_artifact_revision_id
@@ -3434,6 +3450,12 @@ function App() {
           loading={reconciliationResultLoading}
           error={reconciliationResultError}
           onClose={() => setShowingReconciliationResult(false)}
+        />
+      )}
+      {addingProject && (
+        <ProjectCreateForm
+          onCancel={() => setAddingProject(false)}
+          onSubmit={createProject}
         />
       )}
       {(addingRunConfiguration || revisingRunConfiguration) &&

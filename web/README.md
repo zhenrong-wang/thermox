@@ -7,7 +7,7 @@ contract.
 
 The workspace currently provides:
 
-- Team-scoped project and immutable topology-revision browsing;
+- Team-scoped project creation and immutable topology-revision browsing;
 - a graph canvas whose nodes and typed ports come from persisted topology plus the runtime catalog;
 - an explicit five-stage Build, Define, Study, Calculate, and Analyze workflow;
 - draft component placement without prematurely requiring physical parameters, media, or maps;
@@ -31,7 +31,8 @@ The workspace currently provides:
   hints from exact-revision service compilation evidence;
 - direct readiness navigation to component definition, collapsed assembly, connection inspection,
   study setup, or the authoritative compiler diagnostic;
-- catalog-generated component forms for SI parameters, medium/material ports, and artifact bindings;
+- catalog-generated component forms for SI parameters, medium/material ports, artifact bindings,
+  and species-keyed parameters expanded from the selected material basis;
 - property-registry-driven fluid creation with backend, substance, version, and capability metadata;
 - typed project-artifact selectors for performance maps and other declared component resources;
 - typed port-to-port connection authoring using registered connector contracts;
@@ -90,6 +91,18 @@ npm run typecheck
 npm test
 npm run build
 ```
+
+With the complete Compose stack running on `http://127.0.0.1:25173`, the browser E2E verifies a
+real, persisted gas-turbine authoring workflow:
+
+```sh
+npm run test:e2e
+```
+
+The test uses an installed system Google Chrome when available. Otherwise install Playwright's
+Chromium runtime with `npx playwright install chromium`. Override the application address with
+`THERMOX_E2E_BASE_URL`. Each run creates an isolated Team project because project deletion is not
+part of the current public API.
 
 Production deployment, authentication, and gateway routing are not configured yet. The client
 therefore remains a local development surface.

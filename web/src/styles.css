@@ -132,6 +132,22 @@ button {
   opacity: 0.55;
 }
 
+.context-create-button {
+  padding: 7px 9px;
+  border: 1px solid #4e7188;
+  border-radius: 4px;
+  background: transparent;
+  color: #d8e7ef;
+  cursor: pointer;
+  font-size: 10px;
+  font-weight: 700;
+}
+
+.context-create-button:hover {
+  border-color: #76a8bf;
+  background: rgba(255, 255, 255, 0.06);
+}
+
 .runtime-status {
   display: flex;
   align-items: center;

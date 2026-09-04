@@ -15,6 +15,36 @@ afterEach(() => {
   vi.unstubAllGlobals()
 })
 
+describe('project API', () => {
+  it('creates a Team project through the service contract', async () => {
+    const project = {
+      schema_version: 'thermox.project/v1',
+      project_id: 'project-r1',
+      name: 'Combined cycle',
+    }
+    const fetchMock = vi.fn(async (
+      _input: RequestInfo | URL,
+      _init?: RequestInit,
+    ) => new Response(JSON.stringify(project), {
+      status: 201,
+      headers: { 'Content-Type': 'application/json' },
+    }))
+    vi.stubGlobal('fetch', fetchMock)
+
+    await expect(api.createProject('Combined cycle', 'E2E model'))
+      .resolves.toEqual(project)
+    expect(fetchMock.mock.calls[0][0]).toBe('/api/v1/projects')
+    expect(fetchMock.mock.calls[0][1]).toMatchObject({
+      method: 'POST',
+      body: JSON.stringify({
+        schema_version: 'thermox.project.create/v1',
+        name: 'Combined cycle',
+        description: 'E2E model',
+      }),
+    })
+  })
+})
+
 describe('topology presentation API', () => {
   it('loads an optional view and persists typed layout metadata with PUT', async () => {
     const presentation: TopologyPresentation = {

@@ -25,6 +25,32 @@ interface ComponentFormProps {
   onSubmit: (component: ComponentDefinition) => Promise<void>
 }
 
+type CatalogParameter = CatalogComponent['parameters'][number]
+
+export function instanceParameterDescriptors(
+  componentType: CatalogComponent,
+  topology: TopologyDocument,
+  bindings: Readonly<Record<string, string>>,
+): CatalogParameter[] {
+  const species = new Set<string>()
+  for (const port of componentType.ports) {
+    if (port.domain !== 'material') continue
+    const materialId = bindings[port.name]
+    const material = (topology.model.materials ?? []).find(
+      (candidate) => candidate.id === materialId,
+    )
+    for (const name of material?.species ?? []) species.add(name)
+  }
+  return componentType.parameters.flatMap((parameter) =>
+    parameter.name.includes('{species}')
+      ? [...species].map((name) => ({
+          ...parameter,
+          name: parameter.name.replaceAll('{species}', name),
+        }))
+      : [parameter],
+  )
+}
+
 function parameterValue(
   value: unknown,
   fallback: number | null,
@@ -92,12 +118,16 @@ export function ComponentForm({
     ...component?.media,
     ...component?.materials,
   })
+  const instanceParameters = useMemo(
+    () => instanceParameterDescriptors(componentType, topology, bindings),
+    [bindings, componentType, topology],
+  )
   const [artifacts, setArtifacts] = useState<Record<string, string>>({
     ...component?.artifacts,
   })
   const [parameters, setParameters] = useState<Record<string, string>>(() =>
     Object.fromEntries(
-      componentType.parameters.map((parameter) => [
+      instanceParameters.map((parameter) => [
         parameter.name,
         parameterValue(
           component?.parameters?.[parameter.name],
@@ -144,8 +174,16 @@ export function ComponentForm({
       else materials[port.name] = value
     }
     const numericParameters: Record<string, number> = {}
-    for (const descriptor of draftOnly ? [] : componentType.parameters) {
-      const raw = parameters[descriptor.name]?.trim() ?? ''
+    for (const descriptor of draftOnly ? [] : instanceParameters) {
+      const raw = (
+        parameters[descriptor.name] ?? parameterValue(
+          component?.parameters?.[descriptor.name],
+          descriptor.default_value_si,
+          descriptor.dimension,
+          profile,
+          unitDimensions,
+        )
+      ).trim()
       if (!raw) {
         if (descriptor.required && descriptor.default_value_si === null) {
           setFormError(`${descriptor.name} is required.`)
@@ -298,11 +336,11 @@ export function ComponentForm({
           </fieldset>
         )}
 
-        {intent === 'define' && componentType.parameters.length > 0 && (
+        {intent === 'define' && instanceParameters.length > 0 && (
           <fieldset>
             <legend>Parameters · displayed in {profile} units</legend>
             <div className="form-grid">
-              {componentType.parameters.map((parameter) => (
+              {instanceParameters.map((parameter) => (
                 <label key={parameter.name}>
                   <span>
                     {parameter.name}
@@ -319,7 +357,15 @@ export function ComponentForm({
                   <input
                     type="number"
                     step="any"
-                    value={parameters[parameter.name] ?? ''}
+                    value={
+                      parameters[parameter.name] ?? parameterValue(
+                        component?.parameters?.[parameter.name],
+                        parameter.default_value_si,
+                        parameter.dimension,
+                        profile,
+                        unitDimensions,
+                      )
+                    }
                     min={
                       parameter.lower_bound === null
                         ? undefined

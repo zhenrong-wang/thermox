@@ -7,7 +7,8 @@
     "dev": "vite",
     "build": "tsc -b && vite build",
     "typecheck": "tsc -b --pretty false",
-    "test": "vitest run --pool=threads --maxWorkers=1"
+    "test": "vitest run --pool=threads --maxWorkers=1 --exclude 'e2e/**'",
+    "test:e2e": "playwright test"
   },
   "dependencies": {
     "@xyflow/react": "12.11.2",
@@ -15,6 +16,7 @@
     "react-dom": "19.2.8"
   },
   "devDependencies": {
+    "@playwright/test": "^1.62.1",
     "@types/node": "22.15.30",
     "@types/react": "19.2.17",
     "@types/react-dom": "19.2.3",
